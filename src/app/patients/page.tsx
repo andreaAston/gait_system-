@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { getPatientsWithAssignments } from "@/lib/services/patients";
+import { calculateAge, formatPatientGender } from "@/lib/utils/patient";
 
 const statusStyles: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  healed: "bg-blue-50 text-blue-700 border-blue-200",
+  inactive: "bg-amber-50 text-amber-700 border-amber-200",
   discharged: "bg-slate-50 text-slate-600 border-slate-200",
 };
 
@@ -28,6 +29,8 @@ export default async function PatientsPage() {
           <thead>
             <tr className="border-b border-slate-200 text-left text-slate-500">
               <th className="px-5 py-3 font-medium">Name</th>
+              <th className="px-5 py-3 font-medium">Age</th>
+              <th className="px-5 py-3 font-medium">Gender</th>
               <th className="px-5 py-3 font-medium">Status</th>
               <th className="px-5 py-3 font-medium">Device</th>
               <th className="px-5 py-3 font-medium">Registered</th>
@@ -46,6 +49,12 @@ export default async function PatientsPage() {
                   >
                     {p.full_name}
                   </Link>
+                </td>
+                <td className="px-5 py-3 text-slate-600">
+                  {calculateAge(p.date_of_birth) ?? "—"}
+                </td>
+                <td className="px-5 py-3 text-slate-600">
+                  {formatPatientGender(p.gender)}
                 </td>
                 <td className="px-5 py-3">
                   <span
@@ -69,7 +78,7 @@ export default async function PatientsPage() {
             {patients.length === 0 && (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={6}
                   className="px-5 py-10 text-center text-slate-400"
                 >
                   No patients registered yet.

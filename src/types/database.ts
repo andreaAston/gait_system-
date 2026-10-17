@@ -1,10 +1,13 @@
 // Types mirroring the Supabase schema (schema_v2.sql)
 
-export type PatientStatus = "active" | "healed" | "discharged";
+export type PatientStatus = "active" | "inactive" | "discharged";
+export type PatientGender = "female" | "male" | "other" | "prefer_not_to_say";
 
 export interface Patient {
   id: string;
   full_name: string;
+  date_of_birth: string | null;
+  gender: PatientGender | null;
   status: PatientStatus;
   notes: string | null;
   registered_at: string;

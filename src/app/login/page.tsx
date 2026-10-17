@@ -38,8 +38,17 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-slate-900">
-            Gait Monitoring
+          <h1 className="inline-flex items-center gap-1.5 text-2xl font-bold tracking-tight text-slate-900">
+            GAIT
+            <svg
+              aria-label="Medical cross"
+              role="img"
+              viewBox="0 0 20 20"
+              className="h-5 w-5 text-cyan-500"
+              fill="currentColor"
+            >
+              <path d="M7.5 1.5h5v6h6v5h-6v6h-5v-6h-6v-5h6z" />
+            </svg>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Sign in to view patient data

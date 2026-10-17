@@ -2,6 +2,8 @@ import { AppShell } from "@/components/AppShell";
 import { createPatient } from "../actions";
 
 export default function NewPatientPage() {
+  const today = new Date().toISOString().slice(0, 10);
+
   return (
     <AppShell>
       <div className="max-w-lg">
@@ -31,6 +33,47 @@ export default function NewPatientPage() {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
               placeholder="e.g. Andrea Banda"
             />
+          </div>
+
+          <div>
+            <label
+              htmlFor="date_of_birth"
+              className="block text-sm font-medium text-slate-700 mb-1"
+            >
+              Date of birth
+            </label>
+            <input
+              id="date_of_birth"
+              name="date_of_birth"
+              type="date"
+              required
+              max={today}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="gender"
+              className="block text-sm font-medium text-slate-700 mb-1"
+            >
+              Gender
+            </label>
+            <select
+              id="gender"
+              name="gender"
+              required
+              defaultValue=""
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+              <option value="" disabled>
+                Select gender
+              </option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="other">Other</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </select>
           </div>
 
           <div>

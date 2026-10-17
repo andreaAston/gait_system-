@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import {
   getDeviceById,
-  getUnassignedActivePatients,
+  getAssignablePatients,
 } from "@/lib/services/devices";
 import { assignDeviceToPatient } from "../../actions";
 
@@ -16,7 +16,7 @@ export default async function AssignDevicePage({
   const device = await getDeviceById(id);
   if (!device) notFound();
 
-  const availablePatients = await getUnassignedActivePatients();
+  const availablePatients = await getAssignablePatients();
 
   async function handleAssign(formData: FormData) {
     "use server";
@@ -37,7 +37,7 @@ export default async function AssignDevicePage({
         {availablePatients.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
             <p className="text-sm text-slate-500">
-              No active, unassigned patients available.
+              No inactive or discharged patients available to assign.
             </p>
             <Link
               href="/patients/new"

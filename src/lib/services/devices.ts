@@ -61,21 +61,23 @@ export async function getDeviceById(
   };
 }
 
-export async function getUnassignedActivePatients(): Promise<Patient[]> {
+export async function getAssignablePatients(): Promise<Patient[]> {
   const supabase = await createClient();
 
   const { data: patients, error } = await supabase
     .from("patients")
     .select("*")
-    .eq("status", "active");
+    .in("status", ["inactive", "discharged"]);
 
   if (error) throw error;
   if (!patients) return [];
 
-  const { data: assignments } = await supabase
+  const { data: assignments, error: assignmentsError } = await supabase
     .from("device_assignments")
     .select("patient_id")
     .is("ended_at", null);
+
+  if (assignmentsError) throw assignmentsError;
 
   const assignedPatientIds = new Set(
     (assignments ?? []).map((a) => a.patient_id)

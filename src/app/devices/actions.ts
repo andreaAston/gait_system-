@@ -10,14 +10,10 @@ export async function createDevice(formData: FormData) {
   const deviceCode = formData.get("device_code") as string;
   const label = formData.get("label") as string;
 
-  const { data, error } = await supabase
-    .from("devices")
-    .insert({
-      device_code: deviceCode,
-      label: label || null,
-    })
-    .select()
-    .single();
+  const { error } = await supabase.from("devices").insert({
+    device_code: deviceCode,
+    label: label || null,
+  });
 
   if (error) throw new Error(error.message);
 
@@ -29,19 +25,25 @@ export async function assignDeviceToPatient(
   deviceId: string,
   formData: FormData
 ) {
-  const patientId = formData.get("patient_id") as string;
+  const patientId = formData.get("patient_id");
+  if (typeof patientId !== "string" || !patientId) {
+    throw new Error("Select a patient before assigning the device.");
+  }
+
   const supabase = await createClient();
 
   // The unique index on device_assignments (device_id where ended_at
   // is null) protects against double-assignment at the DB level, but
   // we check here too for a clean error message instead of a raw
   // constraint violation.
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from("device_assignments")
     .select("id")
     .eq("device_id", deviceId)
     .is("ended_at", null)
     .maybeSingle();
+
+  if (lookupError) throw new Error(lookupError.message);
 
   if (existing) {
     throw new Error(
@@ -62,16 +64,14 @@ export async function assignDeviceToPatient(
   redirect(`/devices`);
 }
 
-export async function endDeviceAssignment(
-  assignmentId: string,
-  reason: string
-) {
+export async function endDeviceAssignment(assignmentId: string, reason: string) {
   const supabase = await createClient();
 
   const { error } = await supabase
     .from("device_assignments")
     .update({ ended_at: new Date().toISOString(), ended_reason: reason })
-    .eq("id", assignmentId);
+    .eq("id", assignmentId)
+    .is("ended_at", null);
 
   if (error) throw new Error(error.message);
 
