@@ -21,6 +21,50 @@ const patientStatusStyles = {
 
 type ReadingsRange = "live" | "1h" | "24h" | "custom";
 
+function PatientInfoIcon({ name }: { name: "age" | "birth" | "gender" | "device" }) {
+  const paths = {
+    age: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+    birth: (
+      <>
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M16 3v4M8 3v4M3 10h18" />
+      </>
+    ),
+    gender: (
+      <>
+        <circle cx="10" cy="14" r="6" />
+        <path d="m14.5 9.5 6-6M15 3h6v6" />
+      </>
+    ),
+    device: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="M3 10h18M7 15h3" />
+      </>
+    ),
+  };
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
 function parseDateTime(value: string | undefined): Date | null {
   if (!value) return null;
   const date = new Date(value);
@@ -157,71 +201,115 @@ export default async function PatientDetailPage({
 
   return (
     <AppShell>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-xl font-semibold text-slate-900">
-              {patient.full_name}
-            </h1>
-            <span
-              className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${patientStatusStyles[patient.status]}`}
-            >
-              {patient.status}
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-8 w-8"
+              >
+                <circle cx="12" cy="8" r="4" />
+                <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
+              </svg>
             </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                  {patient.full_name}
+                </h1>
+                <span
+                  className={`rounded-full border px-3 py-1 text-sm font-medium capitalize ${patientStatusStyles[patient.status]}`}
+                >
+                  {patient.status}
+                </span>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-600 sm:text-base">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <PatientInfoIcon name="device" />
+                </span>
+                <span>
+                  {assignment
+                    ? `${assignment.device.label ?? assignment.device.device_code}${
+                        assignment.crutch_side
+                          ? ` · ${assignment.crutch_side} side`
+                          : ""
+                      }`
+                    : "No device assignment recorded"}
+                </span>
+              </div>
+            </div>
           </div>
-          <p className="mt-1 text-sm text-slate-500">
-            {assignment
-              ? `Device: ${assignment.device.label ?? assignment.device.device_code}${
-                  assignment.crutch_side
-                    ? ` · ${assignment.crutch_side} side`
-                    : ""
-                }`
-              : "No device assignment recorded"}
-          </p>
-          <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-            <div>
-              <dt className="text-xs font-medium text-slate-500">Age</dt>
-              <dd className="mt-0.5 text-slate-900">
-                {age === null ? "Not provided" : `${age} years`}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-slate-500">
-                Date of birth
-              </dt>
-              <dd className="mt-0.5 text-slate-900">
-                {patient.date_of_birth
-                  ? new Date(
-                      `${patient.date_of_birth}T00:00:00`
-                    ).toLocaleDateString()
-                  : "Not provided"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-slate-500">Gender</dt>
-              <dd className="mt-0.5 text-slate-900">
-                {formatPatientGender(patient.gender)}
-              </dd>
-            </div>
-          </dl>
-          {patient.notes && (
-            <p className="mt-2 max-w-lg text-sm text-slate-600">
-              {patient.notes}
-            </p>
-          )}
+
+          <div className="flex items-center gap-4">
+            {assignment?.ended_at === null && assignment && (
+              <StatusBadge lastReadingAt={lastReadingAt} />
+            )}
+            <ExportCsvButton
+              points={points}
+              sensors={selectedSensors}
+              filename={`${patient.full_name.replace(/\s+/g, "_")}_${csvFrom.slice(0, 10)}_to_${csvTo.slice(0, 10)}.csv`}
+            />
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {assignment?.ended_at === null && assignment && (
-            <StatusBadge lastReadingAt={lastReadingAt} />
-          )}
-          <ExportCsvButton
-            points={points}
-            sensors={selectedSensors}
-            filename={`${patient.full_name.replace(/\s+/g, "_")}_${csvFrom.slice(0, 10)}_to_${csvTo.slice(0, 10)}.csv`}
-          />
-        </div>
-      </div>
+        <dl className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+          {[
+            {
+              label: "Age",
+              value: age === null ? "Not provided" : `${age} years`,
+              icon: "age" as const,
+              tone: "bg-violet-50 text-violet-700",
+            },
+            {
+              label: "Date of birth",
+              value: patient.date_of_birth
+                ? new Date(
+                    `${patient.date_of_birth}T00:00:00`
+                  ).toLocaleDateString()
+                : "Not provided",
+              icon: "birth" as const,
+              tone: "bg-sky-50 text-sky-700",
+            },
+            {
+              label: "Gender",
+              value: formatPatientGender(patient.gender),
+              icon: "gender" as const,
+              tone: "bg-rose-50 text-rose-700",
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 sm:gap-3 sm:p-3"
+            >
+              <span
+                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9 ${item.tone}`}
+              >
+                <PatientInfoIcon name={item.icon} />
+              </span>
+              <div className="min-w-0">
+                <dt className="truncate text-[10px] font-medium uppercase tracking-wide text-slate-500 sm:text-xs">
+                  {item.label}
+                </dt>
+                <dd className="mt-0.5 truncate text-xs font-semibold text-slate-900 sm:text-sm">
+                  {item.value}
+                </dd>
+              </div>
+            </div>
+          ))}
+        </dl>
+        {patient.notes && (
+          <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-slate-700">
+            {patient.notes}
+          </p>
+        )}
+      </section>
 
       {assignments.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-10 text-center">
