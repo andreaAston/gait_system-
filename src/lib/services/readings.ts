@@ -3,7 +3,23 @@ import type { Sensor } from "@/types/database";
 
 export interface ChartPoint {
   recorded_at: string;
+  reading_id: number;
   [sensorLabel: string]: string | number;
+}
+
+function isGaitGraphSensor(sensor: Sensor) {
+  if (sensor.subsystem.startsWith("foot_")) {
+    return (
+      sensor.sensor_type === "fsr" &&
+      ["heel", "midfoot", "forefoot"].includes(sensor.label)
+    );
+  }
+
+  return (
+    sensor.subsystem.startsWith("crutch_") &&
+    ((sensor.sensor_type === "vibration" && sensor.label === "shaft") ||
+      (sensor.sensor_type === "load_cell" && sensor.label === "handgrip"))
+  );
 }
 
 /**
@@ -60,10 +76,14 @@ export async function getDeviceReadings(
   const { data: readings, error: readingsError } = await query;
   if (readingsError) throw readingsError;
 
-  const sensorById = new Map((sensors as Sensor[]).map((s) => [s.id, s]));
+  const graphSensors = (sensors as Sensor[]).filter(isGaitGraphSensor);
+  const sensorById = new Map(graphSensors.map((sensor) => [sensor.id, sensor]));
 
   const points: ChartPoint[] = (readings ?? []).map((r) => {
-    const point: ChartPoint = { recorded_at: r.recorded_at };
+    const point: ChartPoint = {
+      reading_id: r.id,
+      recorded_at: r.recorded_at,
+    };
     for (const rv of r.reading_values as {
       sensor_id: string;
       value: number;
@@ -77,5 +97,5 @@ export async function getDeviceReadings(
     return point;
   });
 
-  return { points, sensors: sensors as Sensor[] };
+  return { points, sensors: graphSensors };
 }

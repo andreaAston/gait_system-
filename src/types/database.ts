@@ -25,6 +25,7 @@ export interface DeviceAssignment {
   id: string;
   device_id: string;
   patient_id: string;
+  crutch_side: "left" | "right" | null;
   started_at: string;
   ended_at: string | null;
   ended_reason: string | null;

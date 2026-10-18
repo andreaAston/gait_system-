@@ -61,6 +61,11 @@ export default async function PatientHistoryPage({
     selectedAssignment.device_id,
     { fromDate, toDate }
   );
+  const selectedSensors = sensors.filter((sensor) =>
+    ["foot_left", "crutch_left", "foot_right", "crutch_right"].includes(
+      sensor.subsystem
+    )
+  );
 
   return (
     <AppShell>
@@ -78,7 +83,7 @@ export default async function PatientHistoryPage({
         </div>
         <ExportCsvButton
           points={points}
-          sensors={sensors}
+          sensors={selectedSensors}
           filename={`${patient.full_name.replace(/\s+/g, "_")}_${fromDate.slice(0, 10)}_to_${toDate.slice(0, 10)}.csv`}
         />
       </div>
@@ -142,7 +147,11 @@ export default async function PatientHistoryPage({
         </button>
       </form>
 
-      <HistoryChart points={points} sensors={sensors} />
+      <HistoryChart
+        points={points}
+        sensors={selectedSensors}
+        rangeKey={`${selectedAssignment.id}:${fromDate}:${toDate}`}
+      />
     </AppShell>
   );
 }

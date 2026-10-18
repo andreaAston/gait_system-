@@ -1,20 +1,25 @@
-import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { getPatientsWithAssignments } from "@/lib/services/patients";
-import type { PatientStatus } from "@/types/database";
-import { calculateAge, formatPatientGender } from "@/lib/utils/patient";
+import { createClient } from "@/lib/supabase/server";
 
-const patientStatusStyles: Record<PatientStatus, string> = {
-  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  inactive: "bg-amber-50 text-amber-700 border-amber-200",
-  discharged: "bg-slate-50 text-slate-600 border-slate-200",
-};
-
-const patientStatusOrder: Record<PatientStatus, number> = {
-  active: 0,
-  discharged: 1,
-  inactive: 2,
-};
+const welcomeQuotes = [
+  {
+    text: "An ounce of prevention is worth a pound of cure.",
+    author: "Benjamin Franklin",
+  },
+  {
+    text: "The good physician treats the disease; the great physician treats the patient who has the disease.",
+    author: "William Osler",
+  },
+  {
+    text: "I attribute my success to this: I never gave or took any excuse.",
+    author: "Florence Nightingale",
+  },
+  {
+    text: "Life is short, the art long; opportunity fleeting, experience treacherous, judgment difficult.",
+    author: "Hippocrates, Aphorisms",
+  },
+];
 
 type DashboardIconName = "patients" | "active" | "discharged" | "inactive";
 
@@ -72,12 +77,30 @@ function DashboardIcon({
 }
 
 export default async function HomePage() {
-  const patients = await getPatientsWithAssignments();
-  const sortedPatients = [...patients].sort(
-    (first, second) =>
-      patientStatusOrder[first.status] - patientStatusOrder[second.status] ||
-      second.registered_at.localeCompare(first.registered_at)
+  const supabase = await createClient();
+  const [
+    patients,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
+    getPatientsWithAssignments(),
+    supabase.auth.getUser(),
+  ]);
+  const rawDisplayName =
+    user?.user_metadata?.full_name ??
+    user?.user_metadata?.name ??
+    user?.email?.split("@")[0];
+  const displayName =
+    typeof rawDisplayName === "string" && rawDisplayName.trim()
+      ? rawDisplayName.trim()
+      : null;
+  const loginSeed = `${user?.id ?? "guest"}:${user?.last_sign_in_at ?? "session"}`;
+  const quoteSeed = Array.from(loginSeed).reduce(
+    (seed, character) => (seed * 31 + character.charCodeAt(0)) >>> 0,
+    0
   );
+  const welcomeQuote = welcomeQuotes[quoteSeed % welcomeQuotes.length];
   const activeCount = patients.filter(
     (patient) => patient.status === "active"
   ).length;
@@ -121,38 +144,52 @@ export default async function HomePage() {
 
   return (
     <AppShell>
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-2 text-slate-500">
-            <DashboardIcon name="active" className="h-4 w-4" />
-            <p className="text-xs font-semibold uppercase tracking-wider">
+      <section className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 px-6 py-6 text-white shadow-sm sm:px-8 sm:py-8">
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-6">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
               Gait monitoring
             </p>
+            <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">
+              Welcome back{displayName ? `, ${displayName}` : ""}
+            </h1>
+            <p className="mt-2 text-sm text-slate-300">
+              Here&apos;s your patient overview for today.
+            </p>
+            <blockquote className="mt-6 border-l-2 border-cyan-400 pl-4">
+              <p className="text-sm leading-relaxed text-slate-100 sm:text-base">
+                “{welcomeQuote.text}”
+              </p>
+              <footer className="mt-2 text-xs font-medium text-cyan-200">
+                — {welcomeQuote.author}
+              </footer>
+            </blockquote>
           </div>
-          <h1 className="text-2xl font-semibold text-slate-900 mt-1">
-            Dashboard overview
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            A snapshot of patient status and recovery progress.
-          </p>
-        </div>
-        <Link
-          href="/patients/new"
-          className="inline-flex items-center gap-2 text-sm font-medium bg-slate-900 text-white px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors"
-        >
-          <svg
+          <div
             aria-hidden="true"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="h-4 w-4"
+            className="hidden h-28 w-28 items-center justify-center rounded-full border border-white/15 bg-white/5 sm:flex"
           >
-            <path d="M10 4v12M4 10h12" strokeLinecap="round" />
-          </svg>
-          New Patient
-        </Link>
-      </div>
+            <svg
+              viewBox="0 0 48 48"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="h-14 w-14 text-cyan-300"
+            >
+              <path d="M24 42s-17-10.5-17-23a9 9 0 0 1 17-4 9 9 0 0 1 17 4c0 12.5-17 23-17 23Z" />
+              <path d="M9 24h10l3-6 5 13 3-7h9" />
+            </svg>
+          </div>
+        </div>
+        <div
+          aria-hidden="true"
+          className="absolute -right-16 -top-24 h-72 w-72 rounded-full border border-white/5"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -right-4 -top-12 h-48 w-48 rounded-full border border-white/5"
+        />
+      </section>
 
       <section
         aria-label="Patient statistics"
@@ -179,131 +216,6 @@ export default async function HomePage() {
         ))}
       </section>
 
-      <section aria-labelledby="patient-list-heading">
-        <div className="mb-4">
-          <h2
-            id="patient-list-heading"
-            className="flex items-center gap-2 text-lg font-semibold text-slate-900"
-          >
-            <DashboardIcon
-              name="patients"
-              className="h-5 w-5 text-slate-500"
-            />
-            Patient list
-          </h2>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-slate-500">
-                <th className="px-5 py-3 font-medium">Patient</th>
-                <th className="px-5 py-3 font-medium">Age</th>
-                <th className="px-5 py-3 font-medium">Gender</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium">Registered</th>
-                <th className="px-5 py-3 font-medium text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedPatients.map((patient) => (
-                <tr
-                  key={patient.id}
-                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-                >
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                        {patient.full_name
-                          .split(/\s+/)
-                          .slice(0, 2)
-                          .map((part) => part.charAt(0).toUpperCase())
-                          .join("")}
-                      </span>
-                      <Link
-                        href={`/patients/${patient.id}`}
-                        className="font-medium text-slate-900 hover:underline"
-                      >
-                        {patient.full_name}
-                      </Link>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-slate-600">
-                    {calculateAge(patient.date_of_birth) ?? "—"}
-                  </td>
-                  <td className="px-5 py-3 text-slate-600">
-                    {formatPatientGender(patient.gender)}
-                  </td>
-                  <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full border capitalize ${
-                        patientStatusStyles[patient.status]
-                      }`}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          patient.status === "active"
-                            ? "bg-emerald-500"
-                            : patient.status === "discharged"
-                              ? "bg-slate-400"
-                              : "bg-amber-500"
-                        }`}
-                      />
-                      {patient.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-slate-500">
-                    {new Date(patient.registered_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <Link
-                      href={`/patients/${patient.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-                    >
-                      <svg
-                        aria-hidden="true"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        className="h-4 w-4"
-                      >
-                        <path d="M1.8 10s3-5.5 8.2-5.5 8.2 5.5 8.2 5.5-3 5.5-8.2 5.5S1.8 10 1.8 10Z" />
-                        <circle cx="10" cy="10" r="2.2" />
-                      </svg>
-                      View data
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {patients.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-5 py-10 text-center text-slate-400"
-                  >
-                    <span className="mb-2 flex justify-center">
-                      <DashboardIcon
-                        name="patients"
-                        className="h-7 w-7 text-slate-300"
-                      />
-                    </span>
-                    No patients registered yet.{" "}
-                    <Link
-                      href="/patients/new"
-                      className="font-medium text-slate-700 underline underline-offset-4"
-                    >
-                      Register a patient
-                    </Link>
-                    .
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </AppShell>
   );
 }
