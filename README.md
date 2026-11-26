@@ -119,3 +119,12 @@ npm run lint      # Run ESLint
 npm run build     # Create a production build
 npm run start     # Start the production server
 ```
+
+On Windows, PlatformIO commands for the master controller:
+
+```powershell
+$PIO = "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe"
+& $PIO device list
+& $PIO run -d ".\firmware\production\left_esp32_gateway" -t upload --upload-port COMx
+& $PIO device monitor -p COMx -b 115200
+```

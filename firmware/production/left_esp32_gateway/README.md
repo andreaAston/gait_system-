@@ -18,7 +18,7 @@
 	- Set `DEVICE_CODE` to exactly the Device Code entered in the dashboard.
 	- Set `FIRMWARE_API_BASE_URL` to the computer's current LAN IPv4 address and port, for example `http://192.168.1.181:3000`.
 	- Set `FIRMWARE_INGEST_TOKEN` to the same value as server `GAIT_INGEST_TOKEN`.
-	- For HTTPS, configure the server root CA certificate.
+	- For the current `gaitsystem.vercel.app` certificate chain, keep the GTS Root R1 certificate in `firmware_config.h`; do not disable TLS certificate validation.
 5. Build and upload.
 6. Open Serial Monitor at 115200 baud.
 
