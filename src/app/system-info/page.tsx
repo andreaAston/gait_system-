@@ -9,9 +9,9 @@ const workflow = [
   },
   {
     number: "02",
-    title: "Assign a device",
+    title: "Choose a device to assign",
     description:
-      "Choose an available device for an eligible patient. Each device can have only one active patient assignment at a time.",
+      "Choose an eligible registered gait system to assign to a patient. The left and right crutches are components of the same system, not separate devices to assign. Each system can have one active patient assignment at a time.",
   },
   {
     number: "03",

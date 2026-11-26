@@ -151,8 +151,9 @@ export default async function HomePage() {
       iconStyle: "bg-amber-50 text-amber-700",
     },
     {
-      label: "Devices Online",
+      label: "Systems Online",
       value: onlineDeviceCount,
+      detail: "Heartbeat in the last 35 seconds",
       icon: "devices" as const,
       iconStyle: "bg-emerald-50 text-emerald-700",
     },
