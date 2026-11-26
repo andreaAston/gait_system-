@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
-import { AutoRefresh } from "@/components/AutoRefresh";
 import { getDevicesWithAssignments } from "@/lib/services/devices";
 import { endDeviceAssignment } from "./actions";
 
@@ -9,7 +8,6 @@ export default async function DevicesPage() {
 
   return (
     <AppShell>
-      <AutoRefresh />
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-slate-900">Devices</h1>
         <Link

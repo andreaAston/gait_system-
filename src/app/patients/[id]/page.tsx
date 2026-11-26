@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
-import { AutoRefresh } from "@/components/AutoRefresh";
 import { ExportCsvButton } from "@/components/ExportCsvButton";
 import { LiveReadingsChart } from "@/components/LiveReadingsChart";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -202,7 +201,6 @@ export default async function PatientDetailPage({
 
   return (
     <AppShell>
-      {liveMode && <AutoRefresh intervalMs={1_000} />}
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="flex min-w-0 items-start gap-4">

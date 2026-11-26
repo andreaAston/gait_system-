@@ -1,5 +1,4 @@
 import { AppShell } from "@/components/AppShell";
-import { AutoRefresh } from "@/components/AutoRefresh";
 import { getOnlineDeviceCount } from "@/lib/services/devices";
 import { getPatientsWithAssignments } from "@/lib/services/patients";
 import { createClient } from "@/lib/supabase/server";
@@ -153,7 +152,6 @@ export default async function HomePage() {
     {
       label: "Systems Online",
       value: onlineDeviceCount,
-      detail: "Heartbeat in the last 35 seconds",
       icon: "devices" as const,
       iconStyle: "bg-emerald-50 text-emerald-700",
     },
@@ -161,7 +159,6 @@ export default async function HomePage() {
 
   return (
     <AppShell>
-      <AutoRefresh />
       <section className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 px-6 py-6 text-white shadow-sm sm:px-8 sm:py-8">
         <div className="relative z-10 flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-2xl">
