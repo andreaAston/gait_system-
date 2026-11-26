@@ -2,21 +2,21 @@
 
 ## Role
 
-- Master for ESP-NOW and optional Wi-Fi testing.
+- Master for ESP-NOW and direct Wi-Fi uploads.
 - Reads left HX711 load cell on DT 18 / SCK 19.
 - Reads left MPU6050 vibration on SDA 4 / SCL 5.
 - Receives left-foot FSR and right-crutch packets from the ESP8266 and ESP32-C3.
 - Derives a simulated right-foot FSR by delaying the measured left-foot FSR by half an estimated stride.
-- Outputs and uploads all six sensor channels every 500 ms when the registered device has an active patient assignment.
+- Uploads its local left-crutch channels and simulated right-foot FSR about every 500 ms when the registered device has an active patient assignment.
 
 ## PlatformIO setup
 
 1. Open this folder in VS Code.
 2. Select `esp32dev` under the `left_gateway_esp32` environment.
-3. Edit `src/wifi_credentials.h` with the Wi-Fi SSID and password.
+3. Edit the ignored local file `src/wifi_credentials.h` with the Wi-Fi SSID and password. The ESP8266 and ESP32-C3 transmitter projects reuse these same local credentials.
 4. Edit the ignored local file `src/firmware_config.h`:
 	- Set `DEVICE_CODE` to exactly the Device Code entered in the dashboard.
-	- Set `FIRMWARE_API_BASE_URL` to the computer's current LAN IPv4 address and port, for example `http://192.168.1.181:3000`.
+	- Set `FIRMWARE_API_BASE_URL` to the deployed dashboard origin, for example `https://gaitsystem.vercel.app`. For local testing, use the computer's current LAN IPv4 address and port, for example `http://192.168.1.181:3000`.
 	- Set `FIRMWARE_INGEST_TOKEN` to the same value as server `GAIT_INGEST_TOKEN`.
 	- For the current `gaitsystem.vercel.app` certificate chain, keep the GTS Root R1 certificate in `firmware_config.h`; do not disable TLS certificate validation.
 5. Build and upload.
@@ -31,7 +31,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 GAIT_INGEST_TOKEN=your-long-random-gateway-token
 ```
 
-The service-role key stays on the server and is never placed in firmware. The ESP32 sends its device code, bearer ingest token, and six sensor values to `/api/firmware/readings`.
+The service-role key stays on the server and is never placed in firmware. All three boards send their readings to `/api/firmware/readings` using the same device code and bearer ingest token. The master sends only its local channels and simulated right-foot FSR; the other boards upload their own channels directly.
 
 The dashboard also needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the same `.env.local` file. Do not commit `.env.local` or put the service-role key in firmware.
 
@@ -64,13 +64,13 @@ In the dashboard:
 2. Assign the device to the patient from Devices.
 3. Assign the complete system to the patient.
 
-The master uploads six-channel readings only while its device remains actively assigned. The right-foot FSR is a half-stride-delayed copy of the measured left-foot FSR. Cadence is estimated from repeated left-foot contact onsets; the simulated value remains zero until a stride interval is available. It is tagged `SIMULATED` in database records and must not be interpreted as measured patient data.
+The master uploads only while its device remains actively assigned. The right-foot FSR is a half-stride-delayed copy of the measured left-foot FSR. Cadence is estimated from repeated left-foot contact onsets; the simulated value remains zero until a stride interval is available. It is tagged `SIMULATED` in database records and must not be interpreted as measured patient data.
 
 The first startup measures and saves the MPU6050 acceleration offsets in ESP32 nonvolatile storage. Later boots load the saved offsets without waiting or recalibrating. To clear the saved MPU offsets and calibrate again, send the lowercase character `r` in the master Serial Monitor. The calibrated HX711 scale factor is applied directly; it is not tared at startup.
 
 ## Test expectations
 
-- Left-foot FSR values come from the ESP8266; right-foot FSR is a half-stride-delayed `SIMULATED` copy.
+- Left-foot FSR values are uploaded directly by the ESP8266; right-foot FSR is a half-stride-delayed `SIMULATED` copy uploaded by this master.
 - Left force and vibration reflect the left crutch sensors.
-- Right force and vibration appear once the right-C3 transmitter is active.
+- Right force and vibration are uploaded directly by the right-C3 transmitter.
 - Right values become zero if no valid packet arrives for 3 seconds.

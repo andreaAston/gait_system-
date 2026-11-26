@@ -59,7 +59,7 @@ export function SensorLineChart({
   initialPoints,
   sensors,
   live = false,
-  maxPoints = 2000,
+  maxPoints = 4000,
 }: {
   deviceId?: string;
   initialPoints: ChartPoint[];
@@ -118,9 +118,10 @@ export function SensorLineChart({
                 : previous.map((entry, index) =>
                     index === existingIndex ? { ...entry, ...point } : entry
                   );
-            return next.length > maxPoints
-              ? next.slice(next.length - maxPoints)
-              : next;
+            next.sort((left, right) =>
+              left.recorded_at.localeCompare(right.recorded_at)
+            );
+            return next.length > maxPoints ? next.slice(-maxPoints) : next;
           });
         }
       );
@@ -322,7 +323,7 @@ export function SensorLineChart({
                                 strokeDasharray={isSimulated ? "6 4" : undefined}
                                 dot={false}
                                 strokeWidth={2}
-                                connectNulls={false}
+                                connectNulls
                                 isAnimationActive={false}
                               />
                             );

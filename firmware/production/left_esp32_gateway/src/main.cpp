@@ -235,21 +235,15 @@ bool requestDeviceStatus() {
   return false;
 }
 
-bool uploadReading(float leftFootFsrN,
-                   float rightFootFsrN,
+bool uploadReading(float rightFootFsrN,
                    float leftCrutchVibrationRmsG,
-                   float leftCrutchForceN,
-                   float rightCrutchVibrationRmsG,
-                   float rightCrutchForceN) {
+                   float leftCrutchForceN) {
   if (!device_assignment_ready || WiFi.status() != WL_CONNECTED) return false;
 
   String payload = "{\"device_code\":\"" + String(DEVICE_CODE) + "\",\"values\":{";
-  payload += "\"left_foot_fsr_n\":" + String(leftFootFsrN, 3) + ",";
   payload += "\"right_foot_fsr_n\":" + String(rightFootFsrN, 3) + ",";
   payload += "\"left_crutch_vibration_rms_g\":" + String(leftCrutchVibrationRmsG, 4) + ",";
-  payload += "\"left_crutch_force_n\":" + String(leftCrutchForceN, 3) + ",";
-  payload += "\"right_crutch_vibration_rms_g\":" + String(rightCrutchVibrationRmsG, 4) + ",";
-  payload += "\"right_crutch_force_n\":" + String(rightCrutchForceN, 3) + "},";
+  payload += "\"left_crutch_force_n\":" + String(leftCrutchForceN, 3) + "},";
   payload += "\"simulated_channels\":[\"right_foot_fsr_n\"]}";
 
   HTTPClient http;
@@ -615,12 +609,9 @@ void loop() {
 
     if (device_assignment_ready) {
       uploadReading(
-        measuredLeftFsrForceN,
         simulatedRightFootForce,
         left_vibration_rms_g,
-        left_force_n,
-        right_crutch_received ? right_vibration_rms_g : 0.0f,
-        right_crutch_received ? right_force_n : 0.0f
+        left_force_n
       );
     } else {
       Serial.printf("DATABASE_UPLOAD=WAITING status=%s\n",

@@ -178,7 +178,7 @@ export default async function PatientDetailPage({
       ? await getDeviceReadings(assignment.device_id, {
           fromDate: fromDate.toISOString(),
           toDate: toDate.toISOString(),
-          limit: 2000,
+          limit: 4000,
         })
       : { points: [], sensors: [] };
 
@@ -202,7 +202,7 @@ export default async function PatientDetailPage({
 
   return (
     <AppShell>
-      {liveMode && <AutoRefresh intervalMs={15_000} />}
+      {liveMode && <AutoRefresh intervalMs={5_000} />}
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="flex min-w-0 items-start gap-4">

@@ -56,7 +56,8 @@ export async function getDeviceReadings(
     .from("gait_readings")
     .select("id, recorded_at, reading_values(sensor_id, value, is_simulated)")
     .eq("device_id", deviceId)
-    .order("recorded_at", { ascending: true });
+    .order("recorded_at", { ascending: false })
+    .order("id", { ascending: false });
 
   if (fromDate || toDate) {
     if (fromDate) query = query.gte("recorded_at", fromDate);
@@ -76,7 +77,7 @@ export async function getDeviceReadings(
   const graphSensors = (sensors as Sensor[]).filter(isGaitGraphSensor);
   const sensorById = new Map(graphSensors.map((sensor) => [sensor.id, sensor]));
 
-  const points: ChartPoint[] = (readings ?? []).map((r) => {
+  const points: ChartPoint[] = [...(readings ?? [])].reverse().map((r) => {
     const point: ChartPoint = {
       reading_id: r.id,
       recorded_at: r.recorded_at,

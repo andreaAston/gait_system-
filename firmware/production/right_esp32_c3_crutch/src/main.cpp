@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <Wire.h>
@@ -8,6 +10,8 @@
 #include <Adafruit_Sensor.h>
 #include "HX711.h"
 #include "CrutchPacket.h"
+#include "../../left_esp32_gateway/src/wifi_credentials.h"
+#include "../../left_esp32_gateway/src/firmware_config.h"
 
 namespace config {
 constexpr uint8_t ESPNOW_CHANNEL = 1;
@@ -18,6 +22,8 @@ constexpr uint8_t HX711_SCK_PIN = 19;
 constexpr uint8_t MPU_ADDRESS = 0x68;
 constexpr uint32_t PACKET_TYPE_RIGHT_CRUTCH = 0x52544852;
 constexpr uint32_t REPORT_INTERVAL_MS = 500;
+constexpr uint32_t DIRECT_UPLOAD_INTERVAL_MS = 1000;
+constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
 constexpr float LOAD_CALIBRATION_FACTOR = -16353.35f;
 }
 
@@ -28,6 +34,8 @@ bool mpu_ready = false;
 bool load_cell_ready = false;
 uint32_t sequence = 0;
 uint32_t last_report_ms = 0;
+uint32_t last_upload_ms = 0;
+bool esp_now_ready = false;
 
 float accel_offset_x = 0.0f;
 float accel_offset_y = 0.0f;
@@ -40,6 +48,25 @@ float right_force_n = 0.0f;
 float sum_squares = 0.0f;
 float peak_vibration = 0.0f;
 uint32_t vibration_sample_count = 0;
+
+void connectWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  const uint32_t started = millis();
+  while (WiFi.status() != WL_CONNECTED &&
+         millis() - started < config::WIFI_CONNECT_TIMEOUT_MS) {
+    delay(250);
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("Wi-Fi connected on channel %u\n", WiFi.channel());
+  } else {
+    Serial.println("Wi-Fi connection failed; ESP-NOW will continue.");
+  }
+}
 
 void calibrateSensors() {
   Serial.println("Keep right crutch stationary for 5 seconds...");
@@ -83,12 +110,30 @@ void onEspNowSent(const uint8_t *, esp_now_send_status_t status) {
 void setupEspNow() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
-  esp_wifi_set_channel(config::ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+
+  if (WiFi.status() == WL_CONNECTED) {
+    const uint8_t currentChannel = WiFi.channel();
+    if (currentChannel != config::ESPNOW_CHANNEL) {
+      Serial.printf(
+        "ESP-NOW channel mismatch: expected %u, connected on %u\n",
+        config::ESPNOW_CHANNEL,
+        currentChannel
+      );
+      return;
+    }
+  } else if (esp_wifi_set_channel(
+               config::ESPNOW_CHANNEL,
+               WIFI_SECOND_CHAN_NONE
+             ) != ESP_OK) {
+    Serial.println("Could not set ESP-NOW channel");
+    return;
+  }
 
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW initialization failed");
     return;
   }
+  esp_now_ready = true;
 
   esp_now_register_send_cb(onEspNowSent);
 
@@ -106,10 +151,52 @@ void setupEspNow() {
   Serial.println(WiFi.macAddress());
 }
 
+void uploadReading(float forceN, float vibrationRmsG) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("DIRECT_UPLOAD=WAITING_WIFI");
+    return;
+  }
+  if (strlen(FIRMWARE_SERVER_ROOT_CA) == 0) {
+    Serial.println("DIRECT_UPLOAD=HTTPS_CA_NOT_CONFIGURED");
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setCACert(FIRMWARE_SERVER_ROOT_CA);
+  client.setTimeout(5000);
+
+  HTTPClient http;
+  const String url =
+    String(FIRMWARE_API_BASE_URL) + "/api/firmware/readings";
+  if (!http.begin(client, url)) {
+    Serial.println("DIRECT_UPLOAD=CONNECTION_SETUP_FAILED");
+    return;
+  }
+
+  http.setTimeout(5000);
+  http.addHeader("Authorization", String("Bearer ") + FIRMWARE_INGEST_TOKEN);
+  http.addHeader("Content-Type", "application/json");
+  String payload = "{\"device_code\":\"" + String(DEVICE_CODE) + "\",\"values\":{";
+  payload += "\"right_crutch_force_n\":" + String(forceN, 3) + ",";
+  payload += "\"right_crutch_vibration_rms_g\":" + String(vibrationRmsG, 4) + "}}";
+
+  const int responseCode = http.POST(payload);
+  const String responseBody = http.getString();
+  http.end();
+
+  if (responseCode == 200 && responseBody.indexOf("\"accepted\":true") >= 0) {
+    Serial.println("DIRECT_UPLOAD=ACCEPTED source=right_crutch");
+  } else {
+    Serial.printf("DIRECT_UPLOAD=REJECTED status=%d body=%s\n",
+                  responseCode, responseBody.c_str());
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  connectWiFi();
   setupEspNow();
 
   Wire.begin(config::SDA_PIN, config::SCL_PIN);
@@ -130,6 +217,7 @@ void setup() {
 
   calibrateSensors();
   last_report_ms = millis();
+  last_upload_ms = millis() - config::DIRECT_UPLOAD_INTERVAL_MS;
 
   Serial.println("RIGHT CRUTCH TRANSMITTER READY");
 }
@@ -197,8 +285,17 @@ void loop() {
       peak_vibration
     };
 
-    const uint8_t broadcastAddress[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    esp_now_send(broadcastAddress, reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
+    if (esp_now_ready) {
+      const uint8_t broadcastAddress[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+      const esp_err_t sendResult = esp_now_send(
+        broadcastAddress,
+        reinterpret_cast<uint8_t *>(&packet),
+        sizeof(packet)
+      );
+      if (sendResult != ESP_OK) {
+        Serial.printf("ESP-NOW queue failed code=%d\n", sendResult);
+      }
+    }
 
     Serial.printf(
       "RIGHT CRUTCH | force=%.2f N | vibration_rms=%.4f g | vibration_peak=%.4f g | seq=%lu\n",
@@ -207,6 +304,11 @@ void loop() {
       peak_vibration,
       static_cast<unsigned long>(packet.sequence)
     );
+
+    if (now - last_upload_ms >= config::DIRECT_UPLOAD_INTERVAL_MS) {
+      last_upload_ms = now;
+      uploadReading(right_force_n, vibration_rms);
+    }
 
     sum_squares = 0.0f;
     peak_vibration = 0.0f;

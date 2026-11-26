@@ -13,7 +13,13 @@ const expectedChannels = [
 ] as const;
 
 type ChannelName = (typeof expectedChannels)[number];
-type ChannelValues = Record<ChannelName, number>;
+
+function isChannelName(value: unknown): value is ChannelName {
+  return (
+    typeof value === "string" &&
+    expectedChannels.some((channel) => channel === value)
+  );
+}
 
 function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status });
@@ -49,6 +55,10 @@ function readDeviceCode(value: unknown): string | null {
   return /^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$/.test(deviceCode)
     ? deviceCode
     : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function getDeviceState(deviceCode: string) {
@@ -108,46 +118,52 @@ export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > 4096) return jsonError("PAYLOAD_TOO_LARGE", 413);
 
-  let body: {
-    device_code?: unknown;
-    values?: unknown;
-    simulated_channels?: unknown;
-  };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return jsonError("INVALID_JSON", 400);
   }
 
+  if (!isRecord(body)) return jsonError("INVALID_PAYLOAD", 400);
+
   const deviceCode = readDeviceCode(body.device_code);
-  if (!deviceCode || !body.values || typeof body.values !== "object") {
+  if (
+    !deviceCode ||
+    !body.values ||
+    typeof body.values !== "object" ||
+    Array.isArray(body.values)
+  ) {
     return jsonError("INVALID_PAYLOAD", 400);
   }
 
-  const values = body.values as Record<string, unknown>;
-  const channels = {} as ChannelValues;
-  for (const channel of expectedChannels) {
-    const value = values[channel];
+  const channels = new Map<ChannelName, number>();
+  for (const [channel, value] of Object.entries(body.values)) {
+    if (!isChannelName(channel)) {
+      return jsonError(`INVALID_CHANNEL:${channel}`, 400);
+    }
     if (typeof value !== "number" || !Number.isFinite(value)) {
       return jsonError(`INVALID_CHANNEL:${channel}`, 400);
     }
-    channels[channel] = value;
+    channels.set(channel, value);
+  }
+  if (channels.size === 0) {
+    return jsonError("INVALID_PAYLOAD", 400);
   }
 
-  if (
-    body.simulated_channels !== undefined &&
-    (!Array.isArray(body.simulated_channels) ||
-      body.simulated_channels.some(
-        (channel) =>
-          typeof channel !== "string" ||
-          !expectedChannels.includes(channel as ChannelName)
-      ))
-  ) {
-    return jsonError("INVALID_SIMULATED_CHANNELS", 400);
+  const simulatedChannelNames: ChannelName[] = [];
+  if (body.simulated_channels !== undefined) {
+    if (!Array.isArray(body.simulated_channels)) {
+      return jsonError("INVALID_SIMULATED_CHANNELS", 400);
+    }
+    for (const channel of body.simulated_channels) {
+      if (!isChannelName(channel) || !channels.has(channel)) {
+        return jsonError("INVALID_SIMULATED_CHANNELS", 400);
+      }
+      simulatedChannelNames.push(channel);
+    }
   }
-  const simulatedChannels = new Set(
-    (body.simulated_channels as ChannelName[] | undefined) ?? []
-  );
+  const simulatedChannels = new Set(simulatedChannelNames);
 
   const state = await getDeviceState(deviceCode);
   if ("error" in state) {
@@ -182,12 +198,12 @@ export async function POST(request: Request) {
       sensor.id,
     ])
   );
-  const readingValues = expectedChannels.map((channel) => {
+  const readingValues = [...channels].map(([channel, value]) => {
     const sensorId = sensorIds.get(sensorKeys[channel]);
     return sensorId
       ? {
           sensor_id: sensorId,
-          value: channels[channel],
+          value,
           is_simulated: simulatedChannels.has(channel),
         }
       : null;
@@ -207,11 +223,11 @@ export async function POST(request: Request) {
 
   const { error: valuesError } = await supabase
     .from("reading_values")
-    .insert(readingValues.map((value) => ({
+    .insert(readingValues.filter((value) => value !== null).map((value) => ({
       reading_id: reading.id,
-      sensor_id: value!.sensor_id,
-      value: value!.value,
-      is_simulated: value!.is_simulated,
+      sensor_id: value.sensor_id,
+      value: value.value,
+      is_simulated: value.is_simulated,
     })));
 
   if (valuesError) {
