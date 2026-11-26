@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Device, DeviceAssignment, Patient } from "@/types/database";
+import { isGatewayOnline } from "@/lib/utils/device-status";
 
 export interface DeviceWithAssignment extends Device {
   active_assignment: (DeviceAssignment & { patient: Patient }) | null;
+  is_online: boolean;
 }
 
 export async function getDevicesWithAssignments(): Promise<
@@ -32,7 +34,20 @@ export async function getDevicesWithAssignments(): Promise<
   return (devices as Device[]).map((d) => ({
     ...d,
     active_assignment: assignmentByDevice.get(d.id) ?? null,
+    is_online: isGatewayOnline(d.last_seen_at),
   }));
+}
+
+export async function getOnlineDeviceCount(): Promise<number> {
+  const supabase = await createClient();
+  const { data: devices, error } = await supabase
+    .from("devices")
+    .select("last_seen_at");
+
+  if (error) throw error;
+  return (devices ?? []).filter((device) =>
+    isGatewayOnline(device.last_seen_at)
+  ).length;
 }
 
 export async function getDeviceById(
@@ -58,6 +73,7 @@ export async function getDeviceById(
   return {
     ...(device as Device),
     active_assignment: assignment ?? null,
+    is_online: isGatewayOnline((device as Device).last_seen_at),
   };
 }
 

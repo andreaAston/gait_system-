@@ -11,7 +11,7 @@ const workflow = [
     number: "02",
     title: "Assign a device",
     description:
-      "Choose an available device and select the crutch side for an eligible patient. Each device can have only one active patient assignment at a time.",
+      "Choose an available device for an eligible patient. Each device can have only one active patient assignment at a time.",
   },
   {
     number: "03",
@@ -23,7 +23,7 @@ const workflow = [
     number: "04",
     title: "Review progress",
     description:
-      "Open a patient's data to see the heel, midfoot, forefoot, crutch vibration, and handle-load lines together over time. Select a live, preset, or custom date range; older assignments can be reviewed and exported as CSV.",
+      "Open a patient's data to see the forefoot FSR, crutch vibration, and handle-load lines together over time. Select a live, preset, or custom date range; older assignments can be reviewed and exported as CSV.",
   },
 ];
 

@@ -1,5 +1,13 @@
 export type DeviceStatus = "online" | "stale" | "offline";
 
+export const GATEWAY_ONLINE_WINDOW_MS = 35_000;
+
+export function isGatewayOnline(lastSeenAt: string | null, now = Date.now()) {
+  if (!lastSeenAt) return false;
+  const lastSeenMs = new Date(lastSeenAt).getTime();
+  return Number.isFinite(lastSeenMs) && now - lastSeenMs <= GATEWAY_ONLINE_WINDOW_MS;
+}
+
 const ONLINE_THRESHOLD_MS = 10 * 1000; // last reading within 10s = online
 const STALE_THRESHOLD_MS = 2 * 60 * 1000; // within 2 min = stale, else offline
 

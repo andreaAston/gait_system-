@@ -236,11 +236,7 @@ export default async function PatientDetailPage({
                 </span>
                 <span>
                   {assignment
-                    ? `${assignment.device.label ?? assignment.device.device_code}${
-                        assignment.crutch_side
-                          ? ` · ${assignment.crutch_side} side`
-                          : ""
-                      }`
+                    ? assignment.device.label ?? assignment.device.device_code
                     : "No device assignment recorded"}
                 </span>
               </div>

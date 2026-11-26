@@ -21,12 +21,20 @@ export function ExportCsvButton({
   filename: string;
 }) {
   function handleExport() {
-    const headers = ["recorded_at", ...sensors.map(sensorColumnName)];
+    const headers = [
+      "recorded_at",
+      ...sensors.flatMap((sensor) => [
+        sensorColumnName(sensor),
+        `${sensorColumnName(sensor)} source`,
+      ]),
+    ];
     const rows = points.map((p) => {
       const row = [p.recorded_at as string];
       for (const s of sensors) {
         const v = p[sensorKey(s)];
+        const simulated = p[`${sensorKey(s)}__is_simulated`] === true;
         row.push(v === undefined ? "" : String(v));
+        row.push(v === undefined ? "" : simulated ? "SIMULATED" : "MEASURED");
       }
       return row;
     });

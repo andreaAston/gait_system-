@@ -4,3 +4,6 @@ out/
 .env*
 !.env.example
 *.log
+.pio/
+firmware/production/*/src/wifi_credentials.h
+firmware/production/left_esp32_gateway/src/firmware_config.h

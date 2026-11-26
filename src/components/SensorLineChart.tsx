@@ -15,7 +15,7 @@ import type { ChartPoint } from "@/lib/services/readings";
 import type { Sensor } from "@/types/database";
 
 const LINE_COLORS = [
-  "#0f766e",
+  "#000000",
   "#2563eb",
   "#ea580c",
   "#7c3aed",
@@ -23,7 +23,7 @@ const LINE_COLORS = [
   "#475569",
   "#ca8a04",
   "#0891b2",
-  "#16a34a",
+  "#000000",
   "#9333ea",
 ];
 
@@ -36,7 +36,12 @@ function sensorKey(sensor: Sensor) {
   return `${sensor.subsystem}__${sensor.sensor_type}__${sensor.label}`;
 }
 
-function sensorName(sensor: Sensor) {
+function sensorHasSimulatedValues(sensor: Sensor, points: ChartPoint[]) {
+  const simulatedKey = `${sensorKey(sensor)}__is_simulated`;
+  return points.some((point) => point[simulatedKey] === true);
+}
+
+function sensorName(sensor: Sensor, isSimulated = false) {
   const name =
     sensor.sensor_type === "fsr"
       ? sensor.label.charAt(0).toUpperCase() + sensor.label.slice(1)
@@ -46,7 +51,7 @@ function sensorName(sensor: Sensor) {
           ? "Crutch vibration"
           : sensor.label.charAt(0).toUpperCase() + sensor.label.slice(1);
 
-  return `${name} (${sensor.unit})`;
+  return `${name} (${sensor.unit})${isSimulated ? " · SIMULATED" : ""}`;
 }
 
 export function SensorLineChart({
@@ -98,6 +103,8 @@ export function SensorLineChart({
             reading_id: readingId,
             recorded_at: reading.recorded_at,
             [sensorKey(sensor)]: payload.new.value as number,
+            [`${sensorKey(sensor)}__is_simulated`]:
+              payload.new.is_simulated === true,
           };
 
           setRealtimeError(null);
@@ -136,6 +143,9 @@ export function SensorLineChart({
         timeValue: new Date(point.recorded_at).getTime(),
       })),
     [points]
+  );
+  const hasSimulatedValues = sensors.some((sensor) =>
+    sensorHasSimulatedValues(sensor, points)
   );
 
   if (sensors.length === 0) {
@@ -177,6 +187,13 @@ export function SensorLineChart({
             Force values are shown in newtons (N); vibration uses the sensor&apos;s
             configured unit.
           </p>
+          {hasSimulatedValues && (
+            <p className="mt-1 text-xs text-amber-700">
+              The dashed right-foot FSR is simulated by shifting the measured
+              left-foot signal by half an estimated stride. It stays at zero
+              until repeated left-foot contacts establish a cadence.
+            </p>
+          )}
         </div>
         {live && (
           <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
@@ -287,22 +304,29 @@ export function SensorLineChart({
                               name,
                             ]}
                           />
-                          {sideSensors.map((sensor, index) => (
-                            <Line
-                              key={sensor.id}
-                              yAxisId={
-                                sensor.unit === "N" ? "force" : "other"
-                              }
-                              type="monotone"
-                              dataKey={sensorKey(sensor)}
-                              name={sensorName(sensor)}
-                              stroke={LINE_COLORS[index % LINE_COLORS.length]}
-                              dot={false}
-                              strokeWidth={2}
-                              connectNulls={false}
-                              isAnimationActive={false}
-                            />
-                          ))}
+                          {sideSensors.map((sensor, index) => {
+                            const isSimulated = sensorHasSimulatedValues(
+                              sensor,
+                              points
+                            );
+                            return (
+                              <Line
+                                key={sensor.id}
+                                yAxisId={
+                                  sensor.unit === "N" ? "force" : "other"
+                                }
+                                type="monotone"
+                                dataKey={sensorKey(sensor)}
+                                name={sensorName(sensor, isSimulated)}
+                                stroke={LINE_COLORS[index % LINE_COLORS.length]}
+                                strokeDasharray={isSimulated ? "6 4" : undefined}
+                                dot={false}
+                                strokeWidth={2}
+                                connectNulls={false}
+                                isAnimationActive={false}
+                              />
+                            );
+                          })}
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -310,23 +334,31 @@ export function SensorLineChart({
                       aria-label={`${side.label} sensor legend`}
                       className="w-44 shrink-0 space-y-2 pr-1 text-xs"
                     >
-                      {sideSensors.map((sensor, index) => (
-                        <li
-                          key={sensor.id}
-                          className="flex items-center gap-2 text-slate-700"
-                          title={sensorName(sensor)}
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="h-3 w-3 shrink-0 rounded-sm"
-                            style={{
-                              backgroundColor:
-                                LINE_COLORS[index % LINE_COLORS.length],
-                            }}
-                          />
-                          <span>{sensorName(sensor)}</span>
-                        </li>
-                      ))}
+                      {sideSensors.map((sensor, index) => {
+                        const isSimulated = sensorHasSimulatedValues(
+                          sensor,
+                          points
+                        );
+                        const color = LINE_COLORS[index % LINE_COLORS.length];
+                        const name = sensorName(sensor, isSimulated);
+                        return (
+                          <li
+                            key={sensor.id}
+                            className="flex items-center gap-2 text-slate-700"
+                            title={name}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="w-3 shrink-0 border-t-2"
+                              style={{
+                                borderTopColor: color,
+                                borderTopStyle: isSimulated ? "dashed" : "solid",
+                              }}
+                            />
+                            <span>{name}</span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 )}

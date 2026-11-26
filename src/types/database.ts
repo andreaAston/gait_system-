@@ -19,13 +19,13 @@ export interface Device {
   device_code: string;
   label: string | null;
   registered_at: string;
+  last_seen_at: string | null;
 }
 
 export interface DeviceAssignment {
   id: string;
   device_id: string;
   patient_id: string;
-  crutch_side: "left" | "right" | null;
   started_at: string;
   ended_at: string | null;
   ended_reason: string | null;
@@ -37,7 +37,7 @@ export interface Sensor {
   id: string;
   subsystem: Subsystem;
   sensor_type: string; // 'fsr' | 'pressure' | 'accel_x' | 'accel_y' | 'accel_z'
-  label: string; // 'heel' | 'midfoot' | 'forefoot' | 'handgrip' | 'base'
+  label: string; // 'forefoot' | 'shaft' | 'handgrip'
   unit: string; // 'N' | 'g'
 }
 
@@ -52,6 +52,7 @@ export interface ReadingValue {
   reading_id: number;
   sensor_id: string;
   value: number;
+  is_simulated: boolean;
 }
 
 // Row shape returned by the `patient_readings` view —

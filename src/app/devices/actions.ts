@@ -26,12 +26,8 @@ export async function assignDeviceToPatient(
   formData: FormData
 ) {
   const patientId = formData.get("patient_id");
-  const crutchSide = formData.get("crutch_side");
   if (typeof patientId !== "string" || !patientId) {
     throw new Error("Select a patient before assigning the device.");
-  }
-  if (crutchSide !== "left" && crutchSide !== "right") {
-    throw new Error("Select the left or right crutch side.");
   }
 
   const supabase = await createClient();
@@ -58,7 +54,6 @@ export async function assignDeviceToPatient(
   const { error } = await supabase.from("device_assignments").insert({
     device_id: deviceId,
     patient_id: patientId,
-    crutch_side: crutchSide,
   });
 
   if (error) throw new Error(error.message);

@@ -1,0 +1,32 @@
+# Right Crutch ESP32-C3 Transmitter
+
+## Role
+
+- Reads the right HX711 load cell on DT 18 / SCK 19.
+- Reads the right MPU6050 vibration on SDA 6 / SCL 7.
+- Sends a 24-byte ESP-NOW packet to the left ESP32 master every 500 ms.
+- Uses ESP-NOW channel 1.
+
+## Packet fields
+
+- Packet type
+- Sequence number
+- Sender timestamp
+- Force in Newtons
+- Vibration RMS in g
+- Vibration peak in g
+
+## PlatformIO setup
+
+1. Open this folder in VS Code.
+2. Select `esp32-c3-devkitm-1` under the `right_crutch_c3` environment.
+3. Build and upload with the ESP32-C3 connected.
+4. Open Serial Monitor at 115200 baud.
+
+Keep the left ESP32 master powered on, on ESP-NOW channel 1. The packet is broadcast to the local master without a hardcoded master MAC address.
+
+## Test expectations
+
+- Serial shows right force and vibration values.
+- The left master shows `right_crutch_ready=true`.
+- Losing power or stopping packets makes the left master mark right-crutch values stale after 3 seconds.

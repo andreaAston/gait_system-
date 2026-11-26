@@ -4,15 +4,12 @@ import type { Sensor } from "@/types/database";
 export interface ChartPoint {
   recorded_at: string;
   reading_id: number;
-  [sensorLabel: string]: string | number;
+  [sensorLabel: string]: string | number | boolean;
 }
 
 function isGaitGraphSensor(sensor: Sensor) {
   if (sensor.subsystem.startsWith("foot_")) {
-    return (
-      sensor.sensor_type === "fsr" &&
-      ["heel", "midfoot", "forefoot"].includes(sensor.label)
-    );
+    return sensor.sensor_type === "fsr" && sensor.label === "forefoot";
   }
 
   return (
@@ -57,7 +54,7 @@ export async function getDeviceReadings(
 
   let query = supabase
     .from("gait_readings")
-    .select("id, recorded_at, reading_values(sensor_id, value)")
+    .select("id, recorded_at, reading_values(sensor_id, value, is_simulated)")
     .eq("device_id", deviceId)
     .order("recorded_at", { ascending: true });
 
@@ -87,11 +84,13 @@ export async function getDeviceReadings(
     for (const rv of r.reading_values as {
       sensor_id: string;
       value: number;
+      is_simulated: boolean;
     }[]) {
       const sensor = sensorById.get(rv.sensor_id);
       if (sensor) {
         const key = `${sensor.subsystem}__${sensor.sensor_type}__${sensor.label}`;
         point[key] = rv.value;
+        point[`${key}__is_simulated`] = rv.is_simulated;
       }
     }
     return point;

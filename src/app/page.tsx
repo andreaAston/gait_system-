@@ -1,4 +1,6 @@
 import { AppShell } from "@/components/AppShell";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { getOnlineDeviceCount } from "@/lib/services/devices";
 import { getPatientsWithAssignments } from "@/lib/services/patients";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,7 +23,7 @@ const welcomeQuotes = [
   },
 ];
 
-type DashboardIconName = "patients" | "active" | "discharged" | "inactive";
+type DashboardIconName = "patients" | "active" | "discharged" | "inactive" | "devices";
 
 function DashboardIcon({
   name,
@@ -58,6 +60,12 @@ function DashboardIcon({
         <path d="M12 8v4l2.5 2.5" />
       </>
     ),
+    devices: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="M3 10h18M7 15h3" />
+      </>
+    ),
   };
 
   return (
@@ -80,11 +88,13 @@ export default async function HomePage() {
   const supabase = await createClient();
   const [
     patients,
+    onlineDeviceCount,
     {
       data: { user },
     },
   ] = await Promise.all([
     getPatientsWithAssignments(),
+    getOnlineDeviceCount(),
     supabase.auth.getUser(),
   ]);
   const rawDisplayName =
@@ -140,10 +150,17 @@ export default async function HomePage() {
       icon: "inactive" as const,
       iconStyle: "bg-amber-50 text-amber-700",
     },
+    {
+      label: "Devices Online",
+      value: onlineDeviceCount,
+      icon: "devices" as const,
+      iconStyle: "bg-emerald-50 text-emerald-700",
+    },
   ];
 
   return (
     <AppShell>
+      <AutoRefresh />
       <section className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 px-6 py-6 text-white shadow-sm sm:px-8 sm:py-8">
         <div className="relative z-10 flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-2xl">
@@ -193,24 +210,35 @@ export default async function HomePage() {
 
       <section
         aria-label="Patient statistics"
-        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(150px,0.65fr)] gap-4 mb-8"
       >
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="bg-white border border-slate-200 rounded-xl p-5 flex items-start justify-between gap-4"
+            className={`bg-white border border-slate-200 rounded-xl flex items-start justify-between gap-3 ${
+              stat.icon === "devices" ? "p-3 sm:p-4" : "p-5"
+            }`}
           >
             <div>
-              <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-              <p className="text-3xl font-semibold text-slate-900 mt-2">
+              <p className={`font-medium text-slate-500 ${stat.icon === "devices" ? "text-xs" : "text-sm"}`}>
+                {stat.label}
+              </p>
+              <p className={`font-semibold text-slate-900 ${stat.icon === "devices" ? "text-2xl mt-1" : "text-3xl mt-2"}`}>
                 {stat.value}
               </p>
-              <p className="text-xs text-slate-400 mt-1">{stat.detail}</p>
+              {"detail" in stat && stat.detail && (
+                <p className="text-xs text-slate-400 mt-1">{stat.detail}</p>
+              )}
             </div>
             <span
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${stat.iconStyle}`}
+              className={`inline-flex shrink-0 items-center justify-center rounded-xl ${
+                stat.icon === "devices" ? "h-9 w-9" : "h-11 w-11"
+              } ${stat.iconStyle}`}
             >
-              <DashboardIcon name={stat.icon} className="h-5 w-5" />
+              <DashboardIcon
+                name={stat.icon}
+                className={stat.icon === "devices" ? "h-4 w-4" : "h-5 w-5"}
+              />
             </span>
           </div>
         ))}

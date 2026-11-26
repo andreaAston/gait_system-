@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { getDevicesWithAssignments } from "@/lib/services/devices";
 import { endDeviceAssignment } from "./actions";
 
@@ -8,6 +9,7 @@ export default async function DevicesPage() {
 
   return (
     <AppShell>
+      <AutoRefresh />
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-slate-900">Devices</h1>
         <Link
@@ -33,15 +35,31 @@ export default async function DevicesPage() {
                   {d.device_code}
                 </p>
               </div>
-              <span
-                className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                  d.active_assignment
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-slate-50 text-slate-500 border-slate-200"
-                }`}
-              >
-                {d.active_assignment ? "Assigned" : "Available"}
-              </span>
+              <div className="flex flex-col items-end gap-2">
+                <span
+                  className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                    d.active_assignment
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-slate-50 text-slate-500 border-slate-200"
+                  }`}
+                >
+                  {d.active_assignment ? "Assigned" : "Available"}
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                    d.is_online ? "text-emerald-700" : "text-slate-500"
+                  }`}
+                  aria-label={`Device ${d.is_online ? "online" : "offline"}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`h-2 w-2 rounded-full ${
+                      d.is_online ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                  />
+                  {d.is_online ? "Online" : "Offline"}
+                </span>
+              </div>
             </div>
 
             {d.active_assignment ? (

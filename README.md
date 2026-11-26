@@ -36,36 +36,60 @@ A web dashboard for managing patient records and monitoring gait sensor data. Th
 
    These are public client credentials intended to be used with Supabase Row Level Security. Do not put a Supabase service-role key in a `NEXT_PUBLIC_` variable.
 
-3. Apply the database schema in your Supabase project. For an existing database, apply these migrations in order:
+  For firmware ingestion, configure `SUPABASE_SERVICE_ROLE_KEY` and `GAIT_INGEST_TOKEN` in the server's `.env.local`. The service-role key must remain server-side; the gateway firmware uses only the matching ingest token.
+
+3. Apply the complete database schema in your Supabase SQL Editor:
 
    ```text
-   supabase/migrations/20261017220500_add_patient_demographics.sql
-   supabase/migrations/20261017224000_assignment_driven_patient_status.sql
-   supabase/migrations/20261018173000_add_assignment_crutch_side.sql
-   supabase/migrations/20261018180000_enable_reading_values_realtime.sql
+   supabase/setup_new_project.sql
    ```
 
-   Run the migrations in order using the Supabase SQL Editor or your configured Supabase CLI workflow before using patient demographics, assignment-driven statuses, crutch-side selection, or live sensor updates.
+   Run this once on a new database before starting the application. It creates the tables, constraints, status trigger, row-level security policies, grants, and Realtime publication entry.
+
+   For an existing database, run this one-time addition in the SQL Editor before using online-device status:
+
+   ```sql
+   ALTER TABLE public.devices
+     ADD COLUMN IF NOT EXISTS last_seen_at timestamptz;
+   ```
+
+   For per-sensor simulated-data labels, also run this once. The second statement marks existing rows for the known demo device as synthetic:
+
+   ```sql
+   ALTER TABLE public.reading_values
+     ADD COLUMN IF NOT EXISTS is_simulated boolean NOT NULL DEFAULT false;
+
+   UPDATE public.reading_values AS value
+   SET is_simulated = true
+   FROM public.gait_readings AS reading
+   JOIN public.devices AS device ON device.id = reading.device_id
+   WHERE value.reading_id = reading.id
+     AND device.device_code = 'DEMO-GAIT-001';
+   ```
 
 4. Start the development server:
 
    ```bash
-   npm run dev
+   npm run dev -- --hostname 0.0.0.0
    ```
 
 5. Open [http://localhost:3000](http://localhost:3000) and sign in with an account created by a Supabase administrator.
 
+For local gateway ingestion, the ESP32 must use the computer's current LAN IPv4 address (not `localhost`) in its firmware configuration. Keep `.env.local` and the matching firmware ingest token private. See the [left ESP32 gateway setup guide](./firmware/production/left_esp32_gateway/README.md) for LAN checks and Serial Monitor status codes.
+
 ## Demo data
 
-For a prototype database, `supabase/seed_demo_data.sql` clears existing operational data and inserts four fictional patients plus one demo device: one Active, two Discharged, and one Inactive. It clears patient records, devices, assignments, gait readings, and reading values; it preserves sensor definitions and Supabase Auth accounts. The single demo device has sequential assignments for Demo Patient 02 and Demo Patient 03, then a current assignment for Demo Patient 01. Demo Patient 04 is Inactive. The Discharged patients each have their own assignment period and sample reading data. Assignment rows include the selected crutch side.
+For a prototype database, run `supabase/seed_demo_data.sql` after the setup script. It is a complete destructive reset and seed: it clears operational patients, devices, assignments, sensors, gait readings, and reading values, while preserving Supabase Auth accounts.
 
-`supabase/seed_demo_readings.sql` creates heel, midfoot, and forefoot force sensors plus crutch vibration and handle-load sensors for both sides, then adds 15 minutes of sample readings for the active assignment and both discharged assignments. The patient graph compares left-foot/crutch readings in the top panel with right-foot/crutch readings below, sharing the time range. It replaces gait readings only for `DEMO-GAIT-001`. Apply all four migrations above, then run `seed_demo_data.sql` followed by `seed_demo_readings.sql`.
+The seed creates four fictional patients and one demo device: one Active, two Discharged, and one Inactive. It creates one forefoot FSR on each foot plus crutch vibration and handle-load sensors for both sides, with 15 minutes of sample readings for the active and discharged assignments.
 
-**Warning:** Running `seed_demo_data.sql` is destructive and replaces operational patient/device/readings data. Review the SQL and ensure all migrations have been applied before running it in the Supabase SQL Editor. A physical device can only be actively assigned to one patient at a time.
+**Warning:** Running `seed_demo_data.sql` replaces operational data. A physical device can only be actively assigned to one patient at a time.
 
 ## Patient readings
 
-The patient detail page plots the left foot/crutch sensors in a top panel and the right foot/crutch sensors in a bottom panel, with a shared time axis. Each panel includes heel, midfoot, and forefoot forces and the matching crutch vibration and handle load when configured; hovering either panel shows its sensor values. Force uses the left axis in newtons; vibration uses a separate right axis in its configured unit. The graph scrolls horizontally on narrow screens. Active assignments default to live readings for the last 15 minutes; users can select 1-hour, 24-hour, or custom ranges and switch assignment history. Historical readings are clipped to the selected assignment period.
+The patient detail page plots the left foot/crutch sensors in a top panel and the right foot/crutch sensors in a bottom panel, with a shared time axis. Each panel includes one forefoot FSR force sensor and the matching crutch vibration and handle load when configured; hovering either panel shows its sensor values. Force uses the left axis in newtons; vibration uses a separate right axis in its configured unit. The graph scrolls horizontally on narrow screens. Active assignments default to live readings for the last 15 minutes; users can select 1-hour, 24-hour, or custom ranges and switch assignment history. Historical readings are clipped to the selected assignment period.
+
+Values generated by firmware or demo seeding are marked `SIMULATED` in chart legends/tooltips and in CSV source columns. The right-foot FSR is a simulated half-stride-delayed copy of the measured left-foot FSR, using cadence estimated from repeated left-foot contacts. It is not a measured clinical value and remains zero until a stride interval can be estimated.
 
 ## Project structure
 
@@ -83,7 +107,7 @@ src/
     utils/         Patient age and device status helpers
   types/           Database/domain types
 supabase/
-  migrations/      Database migrations
+  setup_new_project.sql
   seed_demo_data.sql
 ```
 
