@@ -202,7 +202,7 @@ export default async function PatientDetailPage({
 
   return (
     <AppShell>
-      {liveMode && <AutoRefresh intervalMs={5_000} />}
+      {liveMode && <AutoRefresh intervalMs={1_000} />}
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="flex min-w-0 items-start gap-4">

@@ -17,6 +17,8 @@
 
 The API upload uses the same device code and ingest token as the master; register and assign only the complete gait system in the dashboard. A successful direct upload prints `DIRECT_UPLOAD=ACCEPTED source=left_fsr`; rejected responses print the HTTP status and API response.
 
+HTTPS certificate validation requires a valid clock. The transmitter syncs time with NTP after connecting to Wi-Fi and waits for valid time before attempting uploads. `DIRECT_UPLOAD=TRANSPORT_ERROR` includes the ESP8266 HTTP client's transport error.
+
 ## Calibration and checks
 
 At startup, remove all force from the sensor while the transmitter calibrates its zero offset. Serial output reports the raw ADC value and calculated force. A `raw` value that stays near 1 and force near 0 indicates that the board is not detecting pressure; check sensor wiring and calibration even if direct uploads are accepted.

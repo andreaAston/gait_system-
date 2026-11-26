@@ -30,6 +30,7 @@ constexpr uint32_t DEVICE_STATUS_INTERVAL_MS = 10000;
 constexpr uint32_t RIGHT_CRUTCH_TIMEOUT_MS = 3000;
 constexpr uint32_t FSR_TIMEOUT_MS = 3000;
 constexpr float LEFT_LOAD_CALIBRATION_FACTOR = -15985.68f;
+constexpr float LOAD_CELL_ZERO_THRESHOLD_N = 0.05f;
 constexpr uint32_t MIN_LEFT_FSR_STRIDE_MS = 600;
 constexpr uint32_t MAX_LEFT_FSR_STRIDE_MS = 3000;
 constexpr uint8_t LEFT_FSR_HISTORY_SIZE = 24;
@@ -138,6 +139,12 @@ void calibrateLeftSensors() {
 
   if (load_cell_ready) {
     scale.set_scale(config::LEFT_LOAD_CALIBRATION_FACTOR);
+    Serial.println("Remove all weight from the left load cell; zeroing in 5 seconds...");
+    delay(5000);
+    scale.tare(30);
+    Serial.println("LEFT_LOAD_CELL_ZEROED");
+  } else {
+    Serial.println("Left load cell zeroing skipped: HX711 is not ready.");
   }
 
   Serial.println("Left crutch calibration complete.");
@@ -454,7 +461,7 @@ void updateLeftSensors() {
 
   if (load_cell_ready && scale.is_ready()) {
     float force = scale.get_units(20);
-    if (force < 0.05f) force = 0.0f;
+    if (force < config::LOAD_CELL_ZERO_THRESHOLD_N) force = 0.0f;
     left_force_n = force;
   }
 }

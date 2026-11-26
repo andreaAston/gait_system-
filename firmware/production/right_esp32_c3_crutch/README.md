@@ -7,6 +7,7 @@
 - Sends a 24-byte ESP-NOW packet to the left ESP32 master every 500 ms.
 - Connects to Wi-Fi using the shared local credentials and uploads right-crutch force and vibration directly about every second.
 - Uses ESP-NOW channel 1.
+- Applies the calibrated load-cell factor and tares at startup.
 
 ## Packet fields
 
@@ -26,6 +27,8 @@
 5. Open Serial Monitor at 115200 baud.
 
 The API upload uses the same device code and ingest token as the master; register and assign only the complete gait system in the dashboard. The packet is broadcast to the local master without a hardcoded master MAC address. A successful direct upload prints `DIRECT_UPLOAD=ACCEPTED source=right_crutch`; rejected responses print the HTTP status and API response.
+
+Remove all weight from the right load cell and keep the crutch stationary during the five-second startup zeroing countdown. The firmware uses calibration factor `-16353.35`, averages 30 tare samples, and reports readings below `0.05 N` as zero.
 
 ## Test expectations
 

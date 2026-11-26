@@ -66,7 +66,7 @@ In the dashboard:
 
 The master uploads only while its device remains actively assigned. The right-foot FSR is a half-stride-delayed copy of the measured left-foot FSR. Cadence is estimated from repeated left-foot contact onsets; the simulated value remains zero until a stride interval is available. It is tagged `SIMULATED` in database records and must not be interpreted as measured patient data.
 
-The first startup measures and saves the MPU6050 acceleration offsets in ESP32 nonvolatile storage. Later boots load the saved offsets without waiting or recalibrating. To clear the saved MPU offsets and calibrate again, send the lowercase character `r` in the master Serial Monitor. The calibrated HX711 scale factor is applied directly; it is not tared at startup.
+The first startup measures and saves the MPU6050 acceleration offsets in ESP32 nonvolatile storage. Later boots load the saved offsets without waiting or recalibrating. To clear the saved MPU offsets and calibrate again, send the lowercase character `r` in the master Serial Monitor. The left load cell uses the calibrated factor `-15985.68`, then tares over 30 samples at each boot. Remove all weight from it during the five-second zeroing countdown; readings below `0.05 N` are reported as zero.
 
 ## Test expectations
 

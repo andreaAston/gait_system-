@@ -25,6 +25,7 @@ constexpr uint32_t REPORT_INTERVAL_MS = 500;
 constexpr uint32_t DIRECT_UPLOAD_INTERVAL_MS = 1000;
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
 constexpr float LOAD_CALIBRATION_FACTOR = -16353.35f;
+constexpr float LOAD_CELL_ZERO_THRESHOLD_N = 0.05f;
 }
 
 Adafruit_MPU6050 mpu;
@@ -69,8 +70,16 @@ void connectWiFi() {
 }
 
 void calibrateSensors() {
-  Serial.println("Keep right crutch stationary for 5 seconds...");
+  Serial.println("Remove all weight from the right load cell and keep the crutch stationary; zeroing in 5 seconds...");
   delay(5000);
+
+  if (load_cell_ready) {
+    scale.set_scale(config::LOAD_CALIBRATION_FACTOR);
+    scale.tare(30);
+    Serial.println("RIGHT_LOAD_CELL_ZEROED");
+  } else {
+    Serial.println("Right load cell zeroing skipped: HX711 is not ready.");
+  }
 
   if (mpu_ready) {
     sensors_event_t acceleration;
@@ -92,10 +101,6 @@ void calibrateSensors() {
     accel_offset_x = sum_x / 1000.0;
     accel_offset_y = sum_y / 1000.0;
     accel_offset_z = sum_z / 1000.0;
-  }
-
-  if (load_cell_ready) {
-    scale.set_scale(config::LOAD_CALIBRATION_FACTOR);
   }
 
   Serial.println("Right crutch calibration complete.");
@@ -255,7 +260,7 @@ void updateSensors() {
 
   if (load_cell_ready && scale.is_ready()) {
     float force = scale.get_units(20);
-    if (force < 0.05f) force = 0.0f;
+    if (force < config::LOAD_CELL_ZERO_THRESHOLD_N) force = 0.0f;
     right_force_n = force;
   }
 }

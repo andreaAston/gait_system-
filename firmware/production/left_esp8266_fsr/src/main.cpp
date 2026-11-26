@@ -2,6 +2,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecureBearSSL.h>
+#include <time.h>
 extern "C" {
 #include <espnow.h>
 }
@@ -15,6 +16,8 @@ constexpr uint32_t PACKET_TYPE_LEFT_FSR = 0x4C465352;
 constexpr uint32_t REPORT_INTERVAL_MS = 500;
 constexpr uint32_t DIRECT_UPLOAD_INTERVAL_MS = 1000;
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
+constexpr uint32_t CLOCK_SYNC_TIMEOUT_MS = 12000;
+constexpr time_t MIN_VALID_EPOCH = 1700000000;
 
 // Replace after FSR calibration. This is the existing left-code factor.
 constexpr float CALIBRATION_FACTOR = 4.15f;
@@ -26,6 +29,7 @@ uint32_t sequence = 0;
 uint32_t last_report_ms = 0;
 uint32_t last_upload_ms = 0;
 bool esp_now_ready = false;
+bool system_time_ready = false;
 BearSSL::X509List rootCa(FIRMWARE_SERVER_ROOT_CA);
 
 void connectWiFi() {
@@ -44,6 +48,37 @@ void connectWiFi() {
     Serial.printf("Wi-Fi connected on channel %u\n", wifi_get_channel());
   } else {
     Serial.println("Wi-Fi connection failed; ESP-NOW will continue.");
+  }
+}
+
+bool hasValidSystemTime() {
+  if (system_time_ready) return true;
+
+  const time_t now = time(nullptr);
+  if (now < MIN_VALID_EPOCH) return false;
+
+  system_time_ready = true;
+  Serial.printf("NTP=SYNCED epoch=%lu\n", static_cast<unsigned long>(now));
+  return true;
+}
+
+void syncClock() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("NTP=WAITING_FOR_WIFI");
+    return;
+  }
+
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  Serial.println("NTP=SYNCING");
+
+  const uint32_t started = millis();
+  while (!hasValidSystemTime() &&
+         millis() - started < CLOCK_SYNC_TIMEOUT_MS) {
+    delay(250);
+  }
+
+  if (!system_time_ready) {
+    Serial.println("NTP=NOT_READY; HTTPS uploads will wait for valid time");
   }
 }
 
@@ -95,6 +130,10 @@ void uploadReading(float forceN) {
     Serial.println("DIRECT_UPLOAD=WAITING_WIFI");
     return;
   }
+  if (!hasValidSystemTime()) {
+    Serial.println("DIRECT_UPLOAD=WAITING_FOR_NTP");
+    return;
+  }
 
   BearSSL::WiFiClientSecure client;
   client.setTrustAnchors(&rootCa);
@@ -115,6 +154,14 @@ void uploadReading(float forceN) {
     "{\"device_code\":\"" + String(DEVICE_CODE) +
     "\",\"values\":{\"left_foot_fsr_n\":" + String(forceN, 3) + "}}";
   const int responseCode = http.POST(payload);
+  if (responseCode < 0) {
+    const String error = http.errorToString(responseCode);
+    http.end();
+    Serial.printf("DIRECT_UPLOAD=TRANSPORT_ERROR status=%d error=%s\n",
+                  responseCode, error.c_str());
+    return;
+  }
+
   const String responseBody = http.getString();
   http.end();
 
@@ -166,6 +213,7 @@ void setup() {
   delay(1000);
 
   connectWiFi();
+  syncClock();
   setupEspNow();
 
   calibrateZero();
