@@ -32,8 +32,107 @@ const SIDES = [
   { key: "right", label: "Right foot + crutch" },
 ] as const;
 
+const LEFT_FSR_KEY = "foot_left__fsr__forefoot";
+const RIGHT_FSR_KEY = "foot_right__fsr__forefoot";
+const LIVE_POLL_INTERVAL_MS = 3_000;
+const MIN_STRIDE_INTERVAL_MS = 600;
+const MAX_STRIDE_INTERVAL_MS = 3_000;
+
 function sensorKey(sensor: Sensor) {
   return `${sensor.subsystem}__${sensor.sensor_type}__${sensor.label}`;
+}
+
+function mergePoints(
+  previous: ChartPoint[],
+  incoming: ChartPoint[],
+  maxPoints: number
+) {
+  const pointsById = new Map(
+    previous.map((point) => [point.reading_id, point])
+  );
+  for (const point of incoming) {
+    pointsById.set(point.reading_id, {
+      ...pointsById.get(point.reading_id),
+      ...point,
+    });
+  }
+
+  const next = [...pointsById.values()].sort((left, right) =>
+    left.recorded_at.localeCompare(right.recorded_at)
+  );
+  return next.length > maxPoints ? next.slice(-maxPoints) : next;
+}
+
+function withSimulatedAlternatingFoot(points: ChartPoint[]) {
+  const orderedPoints = [...points].sort((left, right) =>
+    left.recorded_at.localeCompare(right.recorded_at)
+  );
+  const simulatedKey = `${RIGHT_FSR_KEY}__is_simulated`;
+  const hasMeasuredRightFoot = orderedPoints.some(
+    (point) =>
+      typeof point[RIGHT_FSR_KEY] === "number" &&
+      point[simulatedKey] !== true
+  );
+  if (hasMeasuredRightFoot) return orderedPoints;
+
+  const measuredSamples = orderedPoints.flatMap((point) => {
+    const force = point[LEFT_FSR_KEY];
+    if (typeof force !== "number") return [];
+    return [{
+      reading_id: point.reading_id,
+      recorded_at: point.recorded_at,
+      time: new Date(point.recorded_at).getTime(),
+      force,
+    }];
+  });
+  const pointsWithoutOldSimulation = orderedPoints.map((point) => {
+    const copy = { ...point };
+    delete copy[RIGHT_FSR_KEY];
+    delete copy[simulatedKey];
+    return copy;
+  });
+  if (measuredSamples.length < 2) return pointsWithoutOldSimulation;
+
+  const strideIntervals: number[] = [];
+  let wasInContact = false;
+  let lastContactAt: number | null = null;
+  for (const sample of measuredSamples) {
+    const isInContact = sample.force > 0;
+    if (isInContact && !wasInContact) {
+      if (lastContactAt !== null) {
+        const interval = sample.time - lastContactAt;
+        if (
+          interval >= MIN_STRIDE_INTERVAL_MS &&
+          interval <= MAX_STRIDE_INTERVAL_MS
+        ) {
+          strideIntervals.push(interval);
+        }
+      }
+      lastContactAt = sample.time;
+    }
+    wasInContact = isInContact;
+  }
+  if (strideIntervals.length === 0) return pointsWithoutOldSimulation;
+
+  const strideMs =
+    strideIntervals.reduce((sum, interval) => sum + interval, 0) /
+    strideIntervals.length;
+  const halfStrideMs = strideMs / 2;
+  const latestSampleTime = measuredSamples[measuredSamples.length - 1].time;
+  const simulatedPoints = measuredSamples.flatMap((sample) => {
+    const simulatedTime = sample.time + halfStrideMs;
+    if (simulatedTime > latestSampleTime) return [];
+    return [{
+      reading_id: -sample.reading_id,
+      recorded_at: new Date(simulatedTime).toISOString(),
+      [RIGHT_FSR_KEY]: sample.force,
+      [simulatedKey]: true,
+    } satisfies ChartPoint];
+  });
+
+  return [...pointsWithoutOldSimulation, ...simulatedPoints].sort(
+    (left, right) => left.recorded_at.localeCompare(right.recorded_at)
+  );
 }
 
 function sensorHasSimulatedValues(sensor: Sensor, points: ChartPoint[]) {
@@ -74,6 +173,74 @@ export function SensorLineChart({
     if (!live || !deviceId) return;
 
     const supabase = createClient();
+    const sensorById = new Map(sensors.map((sensor) => [sensor.id, sensor]));
+    let latestReadingId = Math.max(
+      0,
+      ...initialPoints.map((point) => point.reading_id)
+    );
+    let pollInProgress = false;
+
+    const pollForReadings = async () => {
+      if (pollInProgress) return;
+      pollInProgress = true;
+
+      try {
+        const { data, error } = await supabase
+          .from("gait_readings")
+          .select("id, recorded_at, reading_values(sensor_id, value, is_simulated)")
+          .eq("device_id", deviceId)
+          .gte("recorded_at", new Date(Date.now() - 15 * 60_000).toISOString())
+          .gt("id", latestReadingId)
+          .order("id", { ascending: true })
+          .limit(1000);
+
+        if (error) {
+          setRealtimeError(`Could not check for new readings: ${error.message}`);
+          return;
+        }
+
+        const incomingPoints: ChartPoint[] = [];
+        for (const reading of data ?? []) {
+          const readingValues = reading.reading_values as {
+            sensor_id: string;
+            value: number;
+            is_simulated: boolean;
+          }[];
+          if (readingValues.length === 0) break;
+
+          const readingId = Number(reading.id);
+          latestReadingId = Math.max(latestReadingId, readingId);
+          const point: ChartPoint = {
+            reading_id: readingId,
+            recorded_at: reading.recorded_at,
+          };
+          for (const readingValue of readingValues) {
+            const sensor = sensorById.get(readingValue.sensor_id);
+            if (!sensor) continue;
+            const key = sensorKey(sensor);
+            point[key] = readingValue.value;
+            point[`${key}__is_simulated`] = readingValue.is_simulated;
+          }
+          incomingPoints.push(point);
+        }
+
+        if (incomingPoints.length > 0) {
+          setPoints((previous) =>
+            mergePoints(previous, incomingPoints, maxPoints)
+          );
+          setRealtimeError(null);
+        }
+      } finally {
+        pollInProgress = false;
+      }
+    };
+
+    void pollForReadings();
+    const pollInterval = window.setInterval(
+      () => void pollForReadings(),
+      LIVE_POLL_INTERVAL_MS
+    );
+
     let channel = supabase.channel(`device-${deviceId}-readings`);
     for (const sensor of sensors) {
       channel = channel.on(
@@ -108,21 +275,7 @@ export function SensorLineChart({
           };
 
           setRealtimeError(null);
-          setPoints((previous) => {
-            const existingIndex = previous.findIndex(
-              (entry) => entry.reading_id === readingId
-            );
-            const next =
-              existingIndex === -1
-                ? [...previous, point]
-                : previous.map((entry, index) =>
-                    index === existingIndex ? { ...entry, ...point } : entry
-                  );
-            next.sort((left, right) =>
-              left.recorded_at.localeCompare(right.recorded_at)
-            );
-            return next.length > maxPoints ? next.slice(-maxPoints) : next;
-          });
+          setPoints((previous) => mergePoints(previous, [point], maxPoints));
         }
       );
     }
@@ -133,20 +286,26 @@ export function SensorLineChart({
     });
 
     return () => {
+      window.clearInterval(pollInterval);
       void supabase.removeChannel(channel);
     };
-  }, [deviceId, live, maxPoints, sensors]);
+  }, [deviceId, initialPoints, live, maxPoints, sensors]);
+
+  const displayPoints = useMemo(
+    () => withSimulatedAlternatingFoot(points),
+    [points]
+  );
 
   const formattedPoints = useMemo(
     () =>
-      points.map((point) => ({
+      displayPoints.map((point) => ({
         ...point,
         timeValue: new Date(point.recorded_at).getTime(),
       })),
-    [points]
+    [displayPoints]
   );
   const hasSimulatedValues = sensors.some((sensor) =>
-    sensorHasSimulatedValues(sensor, points)
+    sensorHasSimulatedValues(sensor, displayPoints)
   );
 
   if (sensors.length === 0) {
@@ -190,9 +349,10 @@ export function SensorLineChart({
           </p>
           {hasSimulatedValues && (
             <p className="mt-1 text-xs text-amber-700">
-              The dashed right-foot FSR is simulated by shifting the measured
-              left-foot signal by half an estimated stride. It stays at zero
-              until repeated left-foot contacts establish a cadence.
+              The right-foot FSR is calculated in the dashboard from the
+              measured left-foot signal, shifted by half an estimated stride.
+              It uses the same force values, is not a separate measurement,
+              and appears after repeated contacts establish cadence.
             </p>
           )}
         </div>
@@ -350,10 +510,9 @@ export function SensorLineChart({
                           >
                             <span
                               aria-hidden="true"
-                              className="w-3 shrink-0 border-t-2"
+                              className="h-3 w-3 shrink-0 rounded-sm"
                               style={{
-                                borderTopColor: color,
-                                borderTopStyle: isSimulated ? "dashed" : "solid",
+                                backgroundColor: color,
                               }}
                             />
                             <span>{name}</span>

@@ -30,13 +30,13 @@ All three active boards connect to Wi-Fi and send their own channel values to `/
 
 ## Direct upload payloads
 
-Each request contains only the channels owned by that board:
+Each request contains only the measured channels owned by that board:
 
-- Left ESP32 gateway: left crutch vibration and load, plus the simulated right-foot FSR.
+- Left ESP32 gateway: left crutch vibration and load.
 - Left ESP8266: measured left-foot FSR force.
 - Right ESP32-C3: right crutch vibration and load.
 
-The right-foot FSR remains tagged `SIMULATED`; it is not a measurement from a separate right-foot board.
+The dashboard calculates the simulated right-foot FSR by shifting the measured left-foot values by half an estimated stride. That display-only signal is not uploaded or stored as a sensor measurement.
 
 Database representation:
 
@@ -54,7 +54,7 @@ reading_values
 The gateway maps subsystem and sensor type to the sensor rows by the setup catalog:
 
 - `foot_left`, `fsr`, `forefoot`
-- `foot_right`, `fsr`, `forefoot` (currently a generated gait-like force pulse, explicitly tagged simulated)
+- `foot_right`, `fsr`, `forefoot` (used for the dashboard's display-only simulated signal)
 - `crutch_left`, `vibration`, `shaft`
 - `crutch_left`, `load_cell`, `handgrip`
 - `crutch_right`, `vibration`, `shaft`

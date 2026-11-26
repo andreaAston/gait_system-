@@ -33,13 +33,7 @@ constexpr float LEFT_LOAD_CALIBRATION_FACTOR = -15985.68f;
 constexpr float LOAD_CELL_ZERO_THRESHOLD_N = 0.05f;
 constexpr uint32_t MIN_LEFT_FSR_STRIDE_MS = 600;
 constexpr uint32_t MAX_LEFT_FSR_STRIDE_MS = 3000;
-constexpr uint8_t LEFT_FSR_HISTORY_SIZE = 24;
 }
-
-struct FsrHistorySample {
-  uint32_t received_ms;
-  float force_n;
-};
 
 Adafruit_MPU6050 mpu;
 HX711 scale;
@@ -76,9 +70,6 @@ float peak_vibration = 0.0f;
 uint32_t vibration_sample_count = 0;
 
 CrutchPacket latest_right_packet = {};
-FsrHistorySample left_fsr_history[config::LEFT_FSR_HISTORY_SIZE] = {};
-uint8_t left_fsr_history_next = 0;
-uint8_t left_fsr_history_count = 0;
 uint32_t last_left_fsr_contact_ms = 0;
 uint32_t estimated_left_fsr_stride_ms = 0;
 bool left_fsr_in_contact = false;
@@ -91,7 +82,7 @@ void printAssignmentInstructions() {
   Serial.println("3. The complete left/right gait system is assigned as one device.");
   Serial.println("4. The master currently reports left force/vibration locally.");
   Serial.println("5. Right crutch packets are accepted when received over ESP-NOW.");
-  Serial.println("6. Right-foot FSR is simulated from a half-stride-shifted left FSR signal.");
+  Serial.println("6. The dashboard calculates the simulated right-foot FSR from the left-foot signal.");
 }
 
 void calibrateLeftSensors() {
@@ -242,16 +233,13 @@ bool requestDeviceStatus() {
   return false;
 }
 
-bool uploadReading(float rightFootFsrN,
-                   float leftCrutchVibrationRmsG,
+bool uploadReading(float leftCrutchVibrationRmsG,
                    float leftCrutchForceN) {
   if (!device_assignment_ready || WiFi.status() != WL_CONNECTED) return false;
 
   String payload = "{\"device_code\":\"" + String(DEVICE_CODE) + "\",\"values\":{";
-  payload += "\"right_foot_fsr_n\":" + String(rightFootFsrN, 3) + ",";
   payload += "\"left_crutch_vibration_rms_g\":" + String(leftCrutchVibrationRmsG, 4) + ",";
-  payload += "\"left_crutch_force_n\":" + String(leftCrutchForceN, 3) + "},";
-  payload += "\"simulated_channels\":[\"right_foot_fsr_n\"]}";
+  payload += "\"left_crutch_force_n\":" + String(leftCrutchForceN, 3) + "}}";
 
   HTTPClient http;
   int responseCode = 0;
@@ -311,12 +299,6 @@ void recordLeftFsrPacket(float forceN, uint32_t receivedAtMs) {
     last_left_fsr_contact_ms = receivedAtMs;
   }
   left_fsr_in_contact = inContact;
-  left_fsr_history[left_fsr_history_next] = { receivedAtMs, forceN };
-  left_fsr_history_next =
-    (left_fsr_history_next + 1) % config::LEFT_FSR_HISTORY_SIZE;
-  if (left_fsr_history_count < config::LEFT_FSR_HISTORY_SIZE) {
-    ++left_fsr_history_count;
-  }
   left_fsr_received = true;
   left_fsr_last_receive_ms = receivedAtMs;
   left_fsr_force_n = forceN;
@@ -466,73 +448,6 @@ void updateLeftSensors() {
   }
 }
 
-float simulatedRightFootForceN(uint32_t nowMs) {
-  FsrHistorySample history[config::LEFT_FSR_HISTORY_SIZE];
-  uint8_t historyNext;
-  uint8_t historyCount;
-  uint32_t strideMs;
-  uint32_t lastReceiveMs;
-  bool sourceReady;
-
-  portENTER_CRITICAL(&left_fsr_mux);
-  memcpy(history, left_fsr_history, sizeof(history));
-  historyNext = left_fsr_history_next;
-  historyCount = left_fsr_history_count;
-  strideMs = estimated_left_fsr_stride_ms;
-  lastReceiveMs = left_fsr_last_receive_ms;
-  sourceReady = left_fsr_received;
-  portEXIT_CRITICAL(&left_fsr_mux);
-
-  if (!sourceReady ||
-      nowMs - lastReceiveMs > config::FSR_TIMEOUT_MS ||
-      strideMs == 0 ||
-      historyCount == 0) {
-    return 0.0f;
-  }
-
-  const uint32_t phaseDelayMs = strideMs / 2;
-  const uint8_t historyStart =
-    (historyNext + config::LEFT_FSR_HISTORY_SIZE - historyCount) %
-    config::LEFT_FSR_HISTORY_SIZE;
-  bool hasOlderSample = false;
-  bool hasNewerSample = false;
-  FsrHistorySample olderSample = {};
-  FsrHistorySample newerSample = {};
-  uint32_t olderAgeMs = UINT32_MAX;
-  uint32_t newerAgeMs = 0;
-
-  for (uint8_t index = 0; index < historyCount; ++index) {
-    const uint8_t sampleIndex =
-      (historyStart + index) % config::LEFT_FSR_HISTORY_SIZE;
-    const FsrHistorySample sample = history[sampleIndex];
-    const uint32_t sampleAgeMs = nowMs - sample.received_ms;
-
-    if (sampleAgeMs >= phaseDelayMs && sampleAgeMs < olderAgeMs) {
-      olderSample = sample;
-      olderAgeMs = sampleAgeMs;
-      hasOlderSample = true;
-    }
-    if (sampleAgeMs <= phaseDelayMs &&
-        (!hasNewerSample || sampleAgeMs > newerAgeMs)) {
-      newerSample = sample;
-      newerAgeMs = sampleAgeMs;
-      hasNewerSample = true;
-    }
-  }
-
-  if (!hasOlderSample || !hasNewerSample) return 0.0f;
-  if (olderAgeMs == newerAgeMs) return olderSample.force_n;
-
-  const float interpolation =
-    static_cast<float>(olderAgeMs - phaseDelayMs) /
-    static_cast<float>(olderAgeMs - newerAgeMs);
-  return max(
-    0.0f,
-    olderSample.force_n +
-      (newerSample.force_n - olderSample.force_n) * interpolation
-  );
-}
-
 void loop() {
   static uint32_t last_sample_ms = 0;
   const uint32_t now = millis();
@@ -587,13 +502,9 @@ void loop() {
     measuredLeftFsrForceN = leftFsrReady ? left_fsr_force_n : 0.0f;
     portEXIT_CRITICAL(&left_fsr_mux);
 
-    const float simulatedRightFootForce = simulatedRightFootForceN(now);
-
     Serial.println("{\"channel_values\":{");
     Serial.printf("  \"left_foot_fsr_n\":%.2f,\n",
                   measuredLeftFsrForceN);
-    Serial.printf("  \"right_foot_fsr_n\":%.2f,\n",
-                  simulatedRightFootForce);
     Serial.printf("  \"left_crutch_vibration_rms_g\":%.4f,\n", left_vibration_rms_g);
     Serial.printf("  \"left_crutch_force_n\":%.2f,\n", left_force_n);
     Serial.printf("  \"right_crutch_vibration_rms_g\":%.4f,\n",
@@ -611,15 +522,10 @@ void loop() {
                   leftFsrReady ? "true" : "false");
     Serial.printf("  \"estimated_left_stride_ms\":%lu,\n",
                   static_cast<unsigned long>(estimatedLeftFsrStrideMs()));
-    Serial.println("  \"right_fsr_source\":\"SIMULATED_HALF_STRIDE_SHIFT\"");
     Serial.println("}}");
 
     if (device_assignment_ready) {
-      uploadReading(
-        simulatedRightFootForce,
-        left_vibration_rms_g,
-        left_force_n
-      );
+      uploadReading(left_vibration_rms_g, left_force_n);
     } else {
       Serial.printf("DATABASE_UPLOAD=WAITING status=%s\n",
                     device_assignment_status.c_str());
